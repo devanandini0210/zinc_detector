@@ -54,7 +54,7 @@ video_files.sort()
 for video_file in tqdm(video_files):
     video_path = os.path.join(video_dir, video_file)
     video_name = os.path.splitext(video_file)[0]
-    output_folder = os.path.join(output_base, f'frames_{video_angle[video_file]}')
+    output_folder = os.path.join(output_base, f'{video_angle[video_file]}')
 
     os.makedirs(output_folder, exist_ok=True)
 

@@ -1,36 +1,38 @@
-import cv2
-import numpy as np
 import os
 import json
+import cv2
 import random
 from glob import glob
 from tqdm import tqdm
 
 # === CONFIGURATION ===
-rocks_folder = "zinc_rock_outputs/"  # folder with transparent PNG rocks
-metadata_file = "zinc_rock_outputs/rock_coordinates.json"  # metadata from extraction step
-background_root = "output_frames/"  # root folder with subfolders per angle
-output_folder = "overlayed_images"
-os.makedirs(output_folder, exist_ok=True)
+rock_json = "zinc_rock_outputs/rock_coordinates.json"
+rock_png_folder = "zinc_rock_outputs/"
+background_root = "output_frames/"
+output_root = "overlayed_images/"
+os.makedirs(output_root, exist_ok=True)
 
-ellipse_width_ratio = 0.6
-ellipse_height_ratio = 0.6
+# === IMAGE RESOLUTION USED FOR ROCK EXTRACTION ===
+src_width = 4032
+src_height = 3024
 
 # === LOAD ROCK METADATA ===
-with open(metadata_file, "r") as f:
+with open(rock_json, "r") as f:
     rock_data = json.load(f)
 
-composite_metadata = {}
-
-
-# Organize rocks by angle
-dict_by_angle = {}
+# === GROUP ROCKS BY ANGLE ===
+rocks_by_angle = {}
 for rock_file, meta in rock_data.items():
     angle = meta["image_angle"]
-    dict_by_angle.setdefault(angle, []).append({
+    bbox = meta["bounding_box"]
+    rocks_by_angle.setdefault(angle, []).append({
         "filename": rock_file,
-        "bbox": meta["bounding_box"]
+        "bbox": bbox
     })
+
+# === OUTPUT METADATA CONTAINER ===
+composite_metadata = {}
+image_counter = 0
 
 # === PROCESS EACH ANGLE FOLDER ===
 for angle_folder in os.listdir(background_root):
@@ -38,123 +40,61 @@ for angle_folder in os.listdir(background_root):
     if not os.path.isdir(full_angle_path):
         continue
 
-    angle_folder = angle_folder.replace("frames_", "")
-    rocks = dict_by_angle.get(angle_folder, [])
-
-
-    rocks = dict_by_angle.get(angle_folder, [])
+    angle_key = angle_folder.replace("frames_", "")
+    rocks = rocks_by_angle.get(angle_key, [])
     if not rocks:
-        print(f"No rocks for angle: {angle_folder}")
+        print(f"No rocks for angle: {angle_key}")
         continue
 
-    background_paths = glob(os.path.join(full_angle_path, "*.jpg"))
+    bg_images = glob(os.path.join(full_angle_path, "*.jpg"))
+    if not bg_images:
+        print(f"No images found in {full_angle_path}")
+        continue
 
-    for bg_path in tqdm(background_paths):
+    output_angle_folder = os.path.join(output_root, angle_key)
+    os.makedirs(output_angle_folder, exist_ok=True)
+
+    for bg_path in tqdm(bg_images, desc=f"Processing {angle_key}"):
         bg = cv2.imread(bg_path, cv2.IMREAD_COLOR)
         h, w = bg.shape[:2]
 
-        # Save output
-        out_name = os.path.splitext(os.path.basename(bg_path))[0] + "_composited.png"
-        # Create subfolder based on angle
-        angle_output_folder = os.path.join(output_folder, angle_folder)
-        os.makedirs(angle_output_folder, exist_ok=True)
-        # Init metadata record
-        composite_metadata[out_name] = {
-            "background_image": bg_path,
-            "output_image": os.path.join(output_folder, angle_folder, out_name),
-            "angle": angle_folder,
-            "rocks": []
-        }
-        
+        image_name = f"composited_{image_counter:04}.jpg"
+        output_path = os.path.join(output_angle_folder, image_name)
 
-
-        # Define ellipse area
-        ellipse_center = (w // 2, h // 2)
-        ellipse_axes = (int(w * ellipse_width_ratio / 2), int(h * ellipse_height_ratio / 2))
-
-        # Create mask for ellipse
-        ellipse_mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.ellipse(ellipse_mask, ellipse_center, ellipse_axes, 0, 0, 360, 255, -1)
-
-        # Select N rocks
+        rocks_on_image = []
         num_rocks = random.randint(5, 20)
-        placed_count = 0
-        max_attempts = 100  # avoid infinite loop
+        chosen_rocks = random.choices(rocks, k=num_rocks)
 
-        attempted_rocks = set()
-
-        while placed_count < num_rocks and len(attempted_rocks) < max_attempts:
-            rock_info = random.choice(rocks)
-            rock_id = rock_info["filename"]
-
-            if rock_id in attempted_rocks:
-                continue
-            attempted_rocks.add(rock_id)
-
-            rock_path = os.path.join(rocks_folder, rock_info["filename"])
-            bbox = rock_info["bbox"]
+        for rock in chosen_rocks:
+            bbox = rock["bbox"]
+            rock_path = os.path.join(rock_png_folder, rock["filename"])
             rock_img = cv2.imread(rock_path, cv2.IMREAD_UNCHANGED)
             if rock_img is None:
                 continue
-            
-            bbox = rock_info["bbox"]
-            w_box, h_box = bbox["width"], bbox["height"]    
-            # === Use relative position from original image ===
+
+            w_box, h_box = bbox["width"], bbox["height"]
             cx_src = bbox["x"] + w_box // 2
             cy_src = bbox["y"] + h_box // 2
-
-            # Manually set your source image resolution if known
-            # (e.g., 1024x768 or the resolution you used to extract rocks)
-            src_width = 4032
-            src_height = 3024
-
-
-            # Map to new image dimensions
             rel_x = cx_src / src_width
             rel_y = cy_src / src_height
-
             cx_new = int(rel_x * w)
             cy_new = int(rel_y * h)
-
-            # Top-left corner of the box
             x = cx_new - w_box // 2
             y = cy_new - h_box // 2
-            #print(f"Rock: {rock_info['filename']}")
-            #print(f"Original center: ({cx_src}, {cy_src}), New center: ({cx_new}, {cy_new})")
-            #print(f"New top-left corner: ({x}, {y}), box size: ({w_box}, {h_box})")
-            # Make sure it fits
+
+            # Ensure rock fits inside new background
             if x < 0 or y < 0 or x + w_box > w or y + h_box > h:
                 continue
-            
-            # Must lie inside the ellipse
-            if ellipse_mask[cy_new, cx_new] == 0:
-                continue
 
-            if x < 0 or y < 0 or x + w_box > w or y + h_box > h:
-                print("Skipping: out of bounds.")
-                continue
-            
-            if ellipse_mask[cy_new, cx_new] == 0:
-                print("Skipping: outside ellipse.")
-                continue
-
-
-            # Paste RGBA onto BGR
+            # Paste rock with alpha
             overlay = rock_img[:, :, :3]
-            mask = rock_img[:, :, 3:] / 255.0
+            alpha = rock_img[:, :, 3:] / 255.0
             roi = bg[y:y+h_box, x:x+w_box]
-            blended = (1 - mask) * roi + mask * overlay
-            bg[y:y+h_box, x:x+w_box] = blended.astype(np.uint8)
+            blended = (1 - alpha) * roi + alpha * overlay
+            bg[y:y+h_box, x:x+w_box] = blended.astype("uint8")
 
-            
-            # Collect overlay metadata
-            composite_metadata.setdefault(out_name, {
-                "background_image": bg_path,
-                "output_image": os.path.join(angle_output_folder, out_name),
-                "angle": angle_folder,
-                "rocks": []
-            })["rocks"].append({
-                "rock_file": rock_info["filename"],
+            rocks_on_image.append({
+                "rock_file": rock["filename"],
                 "position": {
                     "x": x,
                     "y": y,
@@ -163,22 +103,21 @@ for angle_folder in os.listdir(background_root):
                 }
             })
 
-            
-            placed_count += 1
+        # Save final image
+        cv2.imwrite(output_path, bg)
 
+        # Store metadata
+        composite_metadata[image_name] = {
+            "background_image": bg_path,
+            "output_image": output_path,
+            "angle": angle_key,
+            "rocks": rocks_on_image
+        }
 
+        image_counter += 1
 
-        
-
-        
-        out_path = os.path.join(angle_output_folder, out_name)
-        cv2.imwrite(out_path, bg)
-        # print(f"Saved: {out_path}")
-
-
- # Save composite metadata
-
-with open(os.path.join(output_folder, "composite_metadata.json"), "w") as f:
+# === SAVE METADATA ===
+with open(os.path.join(output_root, "composite_metadata.json"), "w") as f:
     json.dump(composite_metadata, f, indent=2)
 
-
+print(f"\n Overlay complete. Saved {image_counter} composited images.")
