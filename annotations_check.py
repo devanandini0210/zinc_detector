@@ -1,20 +1,23 @@
+#import statements
 import os
 import cv2
 import random
 from glob import glob
 
-# === CONFIGURATION ===
+#extracting the input
 image_dir = "dataset_resized/images"
 label_dir = "dataset_resized/labels"
+
+#creating a new folder for the test
 output_dir = "annotations_test"
 os.makedirs(output_dir, exist_ok=True)
 
-# === SETTINGS ===
-num_samples = 10  # how many images to check
-img_size = 1024   # final image size used after resizing
+#initialsing the number of test samples
+num_samples = 10
+img_size = 1024 
 color = (0, 255, 0)
 
-# === Load some random samples ===
+#loading random samples
 image_paths = glob(os.path.join(image_dir, "*.jpg"))
 samples = random.sample(image_paths, min(num_samples, len(image_paths)))
 
@@ -26,7 +29,7 @@ for img_path in samples:
     if img is None:
         continue
 
-    # Draw boxes from YOLO labels
+    #drawing the boxes using YOLO labels
     if os.path.exists(label_path):
         with open(label_path, "r") as f:
             lines = f.read().strip().splitlines()
@@ -46,7 +49,7 @@ for img_path in samples:
             cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
             cv2.putText(img, f"class {int(cls)}", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
-    # Save overlayed image
+    #saving the overlayed images
     output_path = os.path.join(output_dir, img_name)
     cv2.imwrite(output_path, img)
 
