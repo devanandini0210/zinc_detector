@@ -7,4 +7,5 @@ dataset/
 dataset_resized/
 annotations_test/
 augmented_dataset/
+YOLO_output/
 *.zip
