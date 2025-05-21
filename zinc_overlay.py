@@ -1,3 +1,4 @@
+#import statements
 import os
 import json
 import cv2
@@ -5,22 +6,24 @@ import random
 from glob import glob
 from tqdm import tqdm
 
-# === CONFIGURATION ===
+#accessing the JSON file, zinc rocks, and the output frames
 rock_json = "zinc_rock_outputs/rock_coordinates.json"
 rock_png_folder = "zinc_rock_outputs/"
 background_root = "output_frames/"
+
+#creating the output folder
 output_root = "overlayed_images/"
 os.makedirs(output_root, exist_ok=True)
 
-# === IMAGE RESOLUTION USED FOR ROCK EXTRACTION ===
+#initialising the resolution used for zinc rock extraction
 src_width = 4032
 src_height = 3024
 
-# === LOAD ROCK METADATA ===
+#loading the zinc coordinates and angles
 with open(rock_json, "r") as f:
     rock_data = json.load(f)
 
-# === GROUP ROCKS BY ANGLE ===
+#grouping the zinc rocks by angle
 rocks_by_angle = {}
 for rock_file, meta in rock_data.items():
     angle = meta["image_angle"]
@@ -30,11 +33,11 @@ for rock_file, meta in rock_data.items():
         "bbox": bbox
     })
 
-# === OUTPUT METADATA CONTAINER ===
+#output coordinates and angles container
 composite_metadata = {}
 image_counter = 0
 
-# === PROCESS EACH ANGLE FOLDER ===
+#processing each angle folder
 for angle_folder in os.listdir(background_root):
     full_angle_path = os.path.join(background_root, angle_folder)
     if not os.path.isdir(full_angle_path):
@@ -82,11 +85,11 @@ for angle_folder in os.listdir(background_root):
             x = cx_new - w_box // 2
             y = cy_new - h_box // 2
 
-            # Ensure rock fits inside new background
+            #ensure the zinc rock fits inside the new background
             if x < 0 or y < 0 or x + w_box > w or y + h_box > h:
                 continue
 
-            # Paste rock with alpha
+            #overlaying the rcok
             overlay = rock_img[:, :, :3]
             alpha = rock_img[:, :, 3:] / 255.0
             roi = bg[y:y+h_box, x:x+w_box]
@@ -103,10 +106,10 @@ for angle_folder in os.listdir(background_root):
                 }
             })
 
-        # Save final image
+        #saving the final image
         cv2.imwrite(output_path, bg)
 
-        # Store metadata
+        #storing the details of the overlayed image
         composite_metadata[image_name] = {
             "background_image": bg_path,
             "output_image": output_path,
@@ -116,7 +119,7 @@ for angle_folder in os.listdir(background_root):
 
         image_counter += 1
 
-# === SAVE METADATA ===
+#saving the details into a JSON file
 with open(os.path.join(output_root, "composite_metadata.json"), "w") as f:
     json.dump(composite_metadata, f, indent=2)
 
