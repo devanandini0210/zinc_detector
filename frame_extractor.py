@@ -1,14 +1,16 @@
+#import statements
 import cv2
 import os
 from tqdm import tqdm
 
-# Folder containing your video files
+#accesing the folder contining the videos of non-zinc materials
 video_dir = 'non-zinc'
-output_base = 'output_frames'
 
-# Create output base folder if it doesn't exist
+#creating output folder
+output_base = 'output_frames'
 os.makedirs(output_base, exist_ok=True)
 
+#manually initialising the number of frames to skip after each extraction based on the speed of the video
 frame_per_video = {
     "IMG_9066.MOV": 10,
     "IMG_9072.MOV": 15,
@@ -26,6 +28,7 @@ frame_per_video = {
     "IMG_9056.MOV": 20,
 }
 
+#manually initialising the angles the videos were taken from, same as in zinc_extractor.py
 video_angle = {
     "IMG_9066.MOV": 'bottom-middle',
     "IMG_9072.MOV": 'top-right',
@@ -43,14 +46,14 @@ video_angle = {
     "IMG_9056.MOV": 'top',
 }
 
-# Supported video formats
+#initialising supported video formats
 video_extensions = ('.mp4', '.mov', '.avi', '.mkv')
 
-# List video files
+#adding the video files to a list
 video_files = [f for f in os.listdir(video_dir) if f.lower().endswith(video_extensions)]
 video_files.sort()
 
-# Process each video
+#extracting the frames from each video
 for video_file in tqdm(video_files):
     video_path = os.path.join(video_dir, video_file)
     video_name = os.path.splitext(video_file)[0]
@@ -69,7 +72,6 @@ for video_file in tqdm(video_files):
         if not ret:
             break
         
-
         if frame_idx % frame_factor == 0:
             frame_filename = os.path.join(output_folder, f'frame_{saved_idx:05d}.jpg')
             cv2.imwrite(frame_filename, frame)
@@ -78,6 +80,5 @@ for video_file in tqdm(video_files):
         frame_idx += 1
 
     cap.release()
-    # print(f"Extracted {savedidx} frames from '{video_file}' into '{output_folder}'")
-
+    
 print("Frame Extraction Completed")
