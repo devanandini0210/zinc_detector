@@ -1,27 +1,31 @@
+#import statements
 import os
 import cv2
 import json
 from glob import glob
 from tqdm import tqdm
 
-# === CONFIGURATION ===
+#extracting the input data
 input_img_dir = "augmented_dataset/images"
 input_lbl_dir = "augmented_dataset/labels"
 input_coco_json = "augmented_dataset/annotations_coco.json"
 
+#creating the output folders
 output_img_dir = "dataset_resized/images"
 output_lbl_dir = "dataset_resized/labels"
 os.makedirs(output_img_dir, exist_ok=True)
 os.makedirs(output_lbl_dir, exist_ok=True)
 
+#initialising the target size for the resizing
 target_size = 1024
-resized_image_map = {}  # original filename -> (w_old, h_old)
+resized_image_map = {} 
 
-# === Resize Images and YOLO Labels ===
 image_paths = sorted(glob(os.path.join(input_img_dir, "*.jpg")))
 print(f"Resizing {len(image_paths)} images to {target_size}x{target_size}...")
 
+#resizing the images and updating the YOLO labels
 for img_path in tqdm(image_paths, desc="Resizing images"):
+    #resizing the images
     img = cv2.imread(img_path)
     h_old, w_old = img.shape[:2]
     img_resized = cv2.resize(img, (target_size, target_size))
@@ -29,7 +33,7 @@ for img_path in tqdm(image_paths, desc="Resizing images"):
     cv2.imwrite(os.path.join(output_img_dir, img_name), img_resized)
     resized_image_map[img_name] = (w_old, h_old)
 
-    # Resize YOLO labels (normalized, so no changes needed)
+    #updating the YOLO labels
     label_path = os.path.join(input_lbl_dir, img_name.replace(".jpg", ".txt"))
     if os.path.exists(label_path):
         with open(label_path, "r") as f:
@@ -37,7 +41,7 @@ for img_path in tqdm(image_paths, desc="Resizing images"):
         with open(os.path.join(output_lbl_dir, img_name.replace(".jpg", ".txt")), "w") as f:
             f.write("\n".join(lines))
 
-# === Resize COCO Annotations ===
+#updating the COCO annotations
 print("Updating COCO annotations...")
 with open(input_coco_json, "r") as f:
     coco_data = json.load(f)
@@ -66,8 +70,7 @@ for ann in tqdm(coco_data["annotations"], desc="Adjusting COCO boxes"):
     ann["bbox"] = [x * sx, y * sy, w * sx, h * sy]
     ann["area"] = ann["bbox"][2] * ann["bbox"][3]
 
-# === Save resized COCO annotations ===
+#saving the resized COCO annotations
 output_coco_path = "dataset_resized/annotations_coco.json"
 with open(output_coco_path, "w") as f:
     json.dump(coco_data, f, indent=2)
-
